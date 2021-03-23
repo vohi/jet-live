@@ -4,7 +4,33 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "cd ${workspaceFolder}/build && make -j4"
+            "command": "ninja -d keepdepfile",
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "launch",
+            "type": "shell",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "command": "./launcher.sh",
+            "args": [
+                "${workspaceFolder}/build/qt-example/qtdialog"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/qt-example"
+            },
+            "problemMatcher": []
         }
     ]
 }

@@ -254,6 +254,7 @@ set_property(
 
 if (JET_LIVE_BUILD_EXAMPLE)
   add_subdirectory(example)
+  add_subdirectory(qt-example)
 endif()
 
 if (JET_LIVE_BUILD_TESTS)
