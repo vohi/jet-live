@@ -23,7 +23,9 @@ void Dialog::hotReload()
 
     QFont ft;
     ft.setBold(false);
-    lineEdit->setFont(ft);
+    ft.setItalic(false);
+    ft.setPointSize(30);
+    wiggly->setFont(ft);
     wiggly->setText("Reload me!");
 
     delete layout();
