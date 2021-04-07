@@ -23,12 +23,12 @@
                 "showReuseMessage": true,
                 "clear": true
             },
-            "command": "./launcher.sh",
+            "command": "bash",
             "args": [
-                "${workspaceFolder}/build/qt-example/qtdialog"
+                "-c", "./launcher ${workspaceFolder}/build/qt-example/qtdialog 2> debug.log"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/qt-example"
+                "cwd": "${workspaceFolder}/build/launcher"
             },
             "problemMatcher": []
         }
