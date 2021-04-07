@@ -40,6 +40,8 @@ public:
         int res;
         while (_restarted) {
             _restarted = false;
+            // connect things once the event loop is running
+            QCoreApplication::postEvent(this, new QEvent(QEvent::User));
             res = _entry();
             while (_reloading) {
                 QThread::msleep(50);
@@ -91,6 +93,32 @@ protected:
         }
     }
 
+    bool event(QEvent *event) override
+    {
+        if (event->type() == QEvent::User)
+            QCoreApplication::instance()->installEventFilter(this);
+        return QThread::event(event);
+    }
+
+    bool eventFilter(QObject *receiver, QEvent *event) override
+    {
+        if (receiver->isWindowType() || receiver->isWidgetType()) {
+            switch (event->type()) {
+            // Show events are sent before we have the event filter installed
+            case QEvent::Expose:
+            case QEvent::PolishRequest:
+                connectObject(receiver);
+                break;
+            case QEvent::Destroy:
+                disconnectObject(receiver);
+                break;
+            default:
+                break;
+            }
+        }
+        return QThread::eventFilter(receiver, event);
+    }
+
 private:
     void setState(QtHotReload::State newState)
     {
@@ -100,6 +128,21 @@ private:
             _reloading = false;
         _state = newState;
         emit q_ptr->stateChanged(newState);
+        if (_state == QtHotReload::Loaded)
+            emit q_ptr->reloaded();
+    }
+
+    void connectObject(QObject *receiver)
+    {
+        const QMetaObject *mo = receiver->metaObject();
+        bool connected = false;
+        if (mo->indexOfSlot("hotReload()") >= 0) {
+            connected = connect(q_ptr, SIGNAL(reloaded()), receiver, SLOT(hotReload()));
+        }
+    }
+    void disconnectObject(const QObject *receiver)
+    {
+        q_ptr->disconnect(SIGNAL(reloaded()), receiver);
     }
 };
 

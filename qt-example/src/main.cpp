@@ -23,8 +23,7 @@ int main(int argc, char **argv)
             case QtHotReload::Dirty:
                 dialog.setWindowTitle(dialog.windowTitle() + " [dirty]");
                 break;
-            case QtHotReload::Loaded:
-                dialog.hotReload();
+            default:
                 break;
             }
         });

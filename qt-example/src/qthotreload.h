@@ -25,6 +25,7 @@ public:
 
 signals:
     void stateChanged(State);
+    void reloaded();
     void preLoad();
     void postLoad();
 
