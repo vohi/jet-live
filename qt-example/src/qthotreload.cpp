@@ -135,10 +135,8 @@ private:
     void connectObject(QObject *receiver)
     {
         const QMetaObject *mo = receiver->metaObject();
-        bool connected = false;
-        if (mo->indexOfSlot("hotReload()") >= 0) {
-            connected = connect(q_ptr, SIGNAL(reloaded()), receiver, SLOT(hotReload()));
-        }
+        if (mo->indexOfSlot("hotReload()") >= 0)
+            connect(q_ptr, SIGNAL(reloaded()), receiver, SLOT(hotReload()));
     }
     void disconnectObject(const QObject *receiver)
     {
