@@ -192,6 +192,10 @@ namespace jet
                     .append(" -undefined dynamic_lookup");
                 break;
             }
+            case LinkerType::kMSVC: {
+                // we don't link, we load object files directly
+                break;
+            }
             case LinkerType::kUnknown: {
                 return "INVALID_LINKER_TYPE";
                 break;
@@ -252,6 +256,15 @@ namespace jet
             return LinkerType::kApple_ld;
         }
 
+        TinyProcessLib::Process{"link /VERSION",
+            "",
+            [&procOut](const char* bytes, size_t n) { procOut += std::string(bytes, n); },
+            [&procError](const char* bytes, size_t n) { procError += std::string(bytes, n); }}
+            .get_exit_status();
+        
+        if (procOut.find("Microsoft") != std::string::npos) {
+            return LinkerType::kMSVC;
+        }
         context->events->addLog(LogSeverity::kError, "Cannot find out linker type: \n" + procOut);
         return LinkerType::kUnknown;
     }

@@ -23,6 +23,7 @@ namespace jet
         kLLVM_lld6, /** This version of lld is broken. https://reviews.llvm.org/D45261 */
         kGNU_ld,    /** GNU ld linker. */
         kApple_ld,  /** Apple ld linker. */
+        kMSVC,      /** MSVC linker. */
     };
 
     /**
