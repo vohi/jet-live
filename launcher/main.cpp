@@ -90,10 +90,10 @@ public:
                     break;
                 }
                 std::cerr << "Waiting for " << process->objectName().toUtf8().constData();
-                process->waitForFinished(5000);
+                if (process->waitForFinished(5000))
+                    rebuild(process);
             }
         }
-        rebuild();
     }
 
     void sendCommand(const QByteArray &command)
@@ -169,8 +169,8 @@ public:
                 if (process->exitStatus() == QProcess::CrashExit) {
                     if (prevCommand == 'r') {
                         std::cerr << "[W]: Process crashed after reload, trying to repair" << std::endl;
-                        rebuild();
-                        quit = !run();
+                        if (rebuild(process))
+                            quit = !run();
                     } else {
                         std::cerr << "[W]: Process crashed, giving up: " << process->program().toUtf8().constData() << std::endl;
                     }
@@ -198,21 +198,20 @@ public:
         std::cout << "(r)eload, (R)estart, or (q)uit: " << std::flush;
     }
 
-    void rebuild()
+    bool rebuild(QProcess *process)
     {
-        for (const auto &process : qAsConst(processes)) {
-            const QDir exepath(process->program());
-            const QFileInfo pathInfo(exepath.absolutePath());
-            QFile autogenFile(pathInfo.dir().absolutePath() + "/CMakeFiles/" + pathInfo.fileName() + "_autogen.dir/AutogenInfo.json");
-            if (autogenFile.exists()) {
-                std::cerr << "Rebuilding " << exepath.path().toUtf8().constData() << std::endl;
-                autogenFile.open(QIODevice::ReadOnly);
-                const QJsonDocument json = QJsonDocument::fromJson(autogenFile.readAll());
-                const QString cmakeBinary = json["CMAKE_EXECUTABLE"].toString();
-                const QString buildDirectory = json["CMAKE_BINARY_DIR"].toString();
-                QProcess::execute(cmakeBinary, {"--build", buildDirectory});
-            }
+        const QDir exepath(process->program());
+        const QFileInfo pathInfo(exepath.absolutePath());
+        QFile autogenFile(pathInfo.dir().absolutePath() + "/CMakeFiles/" + pathInfo.fileName() + "_autogen.dir/AutogenInfo.json");
+        if (autogenFile.exists()) {
+            std::cerr << "Rebuilding " << exepath.path().toUtf8().constData() << std::endl;
+            autogenFile.open(QIODevice::ReadOnly);
+            const QJsonDocument json = QJsonDocument::fromJson(autogenFile.readAll());
+            const QString cmakeBinary = json["CMAKE_EXECUTABLE"].toString();
+            const QString buildDirectory = json["CMAKE_BINARY_DIR"].toString();
+            return QProcess::execute(cmakeBinary, {"--build", buildDirectory}) == 0;
         }
+        return false;
     }
 
     void readStdin()
