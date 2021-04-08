@@ -176,9 +176,11 @@ void QtHotReloadPrivate::onLog(jet::LogSeverity severity, const std::string& mes
 
             severityString.append("[I]");
             break;
+/*
         case jet::LogSeverity::kWarning:
             severityString.append("[W]");
             break;
+*/
         case jet::LogSeverity::kError:
             severityString.append("[E]");
             break;
