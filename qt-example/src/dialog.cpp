@@ -44,5 +44,5 @@ void Dialog::hotReload()
     vbox->addLayout(hbox2);
 
     setLayout(vbox);
-    updateGeometry();
+    layout()->activate();
 }
