@@ -30,6 +30,7 @@ namespace jet
     {
         onLiveCreated(this, config.reloadOnSignal);
 
+        m_context->events = jet::make_unique<AsyncEventQueue>();
         m_context->liveConfig = config;
         m_context->listener = listener ? std::move(listener) : jet::make_unique<ILiveListener>();
         m_context->thisExecutablePath = getExecutablePath();
@@ -38,7 +39,6 @@ namespace jet
         m_context->dependenciesHandler = jet::make_unique<DepfileDependenciesHandler>();
         m_context->programInfoLoader = jet::make_unique<DefaultProgramInfoLoader>();
         m_context->symbolsFilter = jet::make_unique<DefaultSymbolsFilter>();
-        m_context->events = jet::make_unique<AsyncEventQueue>();
         m_context->codeReloadPipeline = jet::make_unique<CodeReloadPipeline>();
 
         m_context->codeReloadPipeline->addStep(jet::make_unique<LinkTimeRelocationsStep>());
