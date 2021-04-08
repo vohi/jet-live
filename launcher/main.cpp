@@ -15,7 +15,7 @@ public:
         setProgram(arguments.takeFirst());
         setArguments(arguments);
 
-        if (!stdin.open(0, QIODevice::ReadOnly|QIODevice::Unbuffered)) {
+        if (!standardInput.open(0, QIODevice::ReadOnly|QIODevice::Unbuffered)) {
             std::cerr << "Can't open stdin for reading" << std::endl;
             abort();
         }
@@ -50,7 +50,7 @@ public:
         while (state() == QProcess::Running) {
             switch (killState) {
             case KillState::INT:
-                ::kill(processId(), SIGINT);
+                sendSignal(SIGINT);
                 killState = KillState::TERM;
                 break;
             case KillState::TERM:
@@ -68,11 +68,21 @@ public:
         }
     }
 
+    void sendSignal(int signalId)
+    {
+#ifdef Q_OS_WIN
+        qDebug() << "Not implemented";
+#else
+        ::kill(processId(), signalId);
+#endif
+    }
+
     bool run()
     {
         start(QIODevice::ReadOnly);
         return waitForStarted();
     }
+
     void showDialog()
     {
         std::cout << "(r)eload, (R)estart, or (q)uit: " << std::flush;
@@ -95,16 +105,16 @@ public:
 
     void processStdin()
     {
-        const QByteArray data = stdin.readLine();
+        const QByteArray data = standardInput.readLine();
         lastCommand = data[0];
         switch (lastCommand) {
         case 'r':
             std::cout << "Reloading" << std::endl;
-            ::kill(processId(), JET_LIVE_RELOAD_SIGNAL);
+            sendSignal(JET_LIVE_RELOAD_SIGNAL);
             break;
         case 'R':
             std::cout << "Restarting" << std::endl;
-            ::kill(processId(), JET_LIVE_RESTART_SIGNAL);
+            sendSignal(JET_LIVE_RESTART_SIGNAL);
             break;
         case 'q':
             std::cout << "Quitting" << std::endl;
@@ -119,7 +129,7 @@ public:
     }
 
 private:
-    QFile stdin;
+    QFile standardInput;
     QSocketNotifier stdinNotifier;
     char lastCommand;
 };
