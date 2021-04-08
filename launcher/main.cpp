@@ -2,12 +2,17 @@
 #include <iostream>
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <csignal>
 #endif
 
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QNetworkInterface>
 
-class ProcessController : public QProcess
+class ProcessController : public QObject
 {
 public:
     ProcessController()
@@ -17,43 +22,36 @@ public:
     : stdinNotifier(0, QSocketNotifier::Read)
 #endif
     {
-        QStringList arguments = QCoreApplication::arguments();
-        arguments.takeFirst(); // self
-        setProgram(arguments.takeFirst());
-        setArguments(arguments);
+        arguments = QCoreApplication::arguments();
+        arguments.takeFirst(); // argv[0], i.e. self
 
-        if (!standardInput.open(0, QIODevice::ReadOnly|QIODevice::Unbuffered)) {
-            std::cerr << "[E]: Can't open stdin for reading" << std::endl;
-            abort();
+        int connectData = arguments.indexOf("--connect");
+        if (connectData > -1) {
+            QString host = arguments.takeAt(connectData);
+            host = arguments.takeAt(connectData);
+            QString port = arguments.takeAt(connectData);
+            tcpClient = new QTcpSocket(this);
+            tcpClient->connectToHost(host, port.toInt());
+            connect(tcpClient, &QIODevice::readyRead, this, &ProcessController::readTcp);
         }
 
-        connect(this, &QProcess::readyReadStandardOutput, this, [&](){
-            std::cout << readAllStandardOutput().constData();
-        });
-        connect(this, &QProcess::readyReadStandardError, this, [&](){
-            std::cerr << readAllStandardError().constData();
-        });
-        connect(this, &QProcess::finished, this, [&](){
-            const char prevCommand = lastCommand;
-            lastCommand = 0;
-            bool quit = true;
-            if (exitStatus() == QProcess::CrashExit) {
-                if (prevCommand == 'r') {
-                    std::cerr << "[W]: Process crashed after reload, trying to repair" << std::endl;
-                    rebuild();
-                    quit = !run();
-                } else {
-                    std::cerr << "[W]: Process crashed, giving up" << std::endl;
-                }
+        if (!tcpClient) {
+            if (!standardInput.open(0, QIODevice::ReadOnly|QIODevice::Unbuffered)) {
+                std::cerr << "[E]: Can't open stdin for reading" << std::endl;
+                abort();
             }
-            if (quit)
-                QCoreApplication::quit();
-        });
+        }
+
+        if (!tcpClient) {
 #ifdef Q_OS_WIN
-        connect(&stdinNotifier, &QWinEventNotifier::activated, this, &ProcessController::processStdin);
+            connect(&stdinNotifier, &QWinEventNotifier::activated, this, &ProcessController::readStdin);
 #else
-        connect(&stdinNotifier, &QSocketNotifier::activated, this, &ProcessController::processStdin);
+            connect(&stdinNotifier, &QSocketNotifier::activated, this, &ProcessController::readStdin);
+            signal(SIGINT, [](int){
+                QCoreApplication::quit();
+            });
 #endif
+        }
 
         QLocalServer::removeServer("qt_hot_reload");
         if (localServer.listen("qt_hot_reload")) {
@@ -68,31 +66,42 @@ public:
     }
     ~ProcessController()
     {
-        enum class KillState { INT, TERM, KILL, GIVEUP } killState = KillState::INT;
-        while (state() == QProcess::Running) {
-            switch (killState) {
-            case KillState::INT:
-                sendSignal("quit");
-                killState = KillState::TERM;
-                break;
-            case KillState::TERM:
-                terminate();
-                killState = KillState::KILL;
-                break;
-            case KillState::KILL:
-                kill();
-                killState = KillState::GIVEUP;
-                break;
-            case KillState::GIVEUP:
-                return;
+        for (const auto &process : qAsConst(processes)) {
+            enum class KillState { INT, TERM, KILL, GIVEUP } killState = KillState::INT;
+            while (process->state() == QProcess::Running) {
+                switch (killState) {
+                case KillState::INT:
+                    sendSignal("quit");
+#ifndef Q_OS_WIN
+                    ::kill(process->processId(), SIGINT);
+#endif
+                    killState = KillState::TERM;
+                    break;
+                case KillState::TERM:
+                    process->terminate();
+                    killState = KillState::KILL;
+                    break;
+                case KillState::KILL:
+                    process->kill();
+                    killState = KillState::GIVEUP;
+                    break;
+                case KillState::GIVEUP:
+                    continue;
+                }
+                process->waitForFinished(5000);
             }
-            waitForFinished(1000);
         }
     }
 
     void sendSignal(const QByteArray &command)
     {
+        std::cerr << "Sending " << command.constData() << " to " << localSockets.count() << " local clients" << std::endl;
         for (const auto &client : qAsConst(localSockets)) {
+            client->write(command + "\n");
+            client->waitForBytesWritten();
+        }
+        std::cerr << "Sending " << command.constData() << " to " << tcpClients.count() << " remote clients" << std::endl;
+        for (const auto &client : qAsConst(tcpClients)) {
             client->write(command + "\n");
             client->waitForBytesWritten();
         }
@@ -100,8 +109,79 @@ public:
 
     bool run()
     {
-        start(QIODevice::ReadOnly);
-        return waitForStarted();
+        bool success = true;
+        for (const auto &argument : qAsConst(arguments)) {
+            QProcess *process = new QProcess(this);
+            processes.append(process);
+            if (argument.contains(":")) {
+                QStringList segments = argument.split(":");
+                QString vmname = segments.takeFirst();
+                if (!tcpServer.isListening()) {
+                    QHostAddress serverAddress;
+                    for (const auto &address : QNetworkInterface::allAddresses()) {
+                        if (address.isLoopback())
+                            continue;
+                        if (address == QHostAddress(QHostAddress::LocalHost))
+                            continue;
+                        if (address.protocol() != QAbstractSocket::IPv4Protocol)
+                            continue;
+                        serverAddress = address;
+                        break;
+                    }
+                    tcpServer.listen(serverAddress);
+                    connect(&tcpServer, &QTcpServer::newConnection, this, [&]{
+                        std::cerr << "[I]: New tcp connection" << std::endl;
+                        tcpClients.append(tcpServer.nextPendingConnection());
+                    });
+                }
+                segments.append("--connect");
+                segments.append(tcpServer.serverAddress().toString());
+                segments.append(QString::number(tcpServer.serverPort()));
+                process->setProgram("minicoin");
+                process->setObjectName(vmname.toUtf8());
+                process->setArguments({"run", "launch", "--exe", "launcher", "--args", segments.join(" "), vmname});
+            } else {
+                process->setObjectName("Local");
+                process->setProgram(argument);
+            }
+
+            connect(process, &QProcess::readyReadStandardOutput, this, [process](){
+                std::cerr << "(" << process->objectName().toUtf8().constData() << ") ";
+                std::cerr << process->readAllStandardOutput().constData();
+            });
+
+            connect(process, &QProcess::readyReadStandardError, this, [process](){
+                std::cerr << "(" << process->objectName().toUtf8().constData() << ") ";
+                std::cerr << process->readAllStandardError().constData();
+            });
+
+            connect(process, &QProcess::finished, this, [process, this](){
+                const char prevCommand = lastCommand;
+                lastCommand = 0;
+                bool quit = true;
+                if (process->exitStatus() == QProcess::CrashExit) {
+                    if (prevCommand == 'r') {
+                        std::cerr << "[W]: Process crashed after reload, trying to repair" << std::endl;
+                        rebuild();
+                        quit = !run();
+                    } else {
+                        std::cerr << "[W]: Process crashed, giving up: " << process->program().toUtf8().constData() << std::endl;
+                    }
+                }
+                processes.removeAll(process);
+                if (processes.isEmpty() && quit)
+                    QCoreApplication::quit();
+            });
+
+            process->start(QIODevice::ReadOnly);
+            if (!process->waitForStarted()) {
+                std::cerr << "Failed to start " << process->program().toUtf8().constData() << std::endl;
+                success = false;
+                break;
+            }
+        }
+
+        return success;
     }
 
     void showDialog()
@@ -111,30 +191,45 @@ public:
 
     void rebuild()
     {
-        const QDir exepath(program());
-        const QFileInfo pathInfo(exepath.absolutePath());
-        QFile autogenFile(pathInfo.dir().absolutePath() + "/CMakeFiles/" + pathInfo.fileName() + "_autogen.dir/AutogenInfo.json");
-        if (autogenFile.exists()) {
-            autogenFile.open(QIODevice::ReadOnly);
-            const QJsonDocument json = QJsonDocument::fromJson(autogenFile.readAll());
-            const QString cmakeBinary = json["CMAKE_EXECUTABLE"].toString();
-            const QString buildDirectory = json["CMAKE_BINARY_DIR"].toString();
-            QProcess::execute(cmakeBinary, {"--build", buildDirectory});
+        for (const auto &process : qAsConst(processes)) {
+            const QDir exepath(process->program());
+            const QFileInfo pathInfo(exepath.absolutePath());
+            QFile autogenFile(pathInfo.dir().absolutePath() + "/CMakeFiles/" + pathInfo.fileName() + "_autogen.dir/AutogenInfo.json");
+            if (autogenFile.exists()) {
+                autogenFile.open(QIODevice::ReadOnly);
+                const QJsonDocument json = QJsonDocument::fromJson(autogenFile.readAll());
+                const QString cmakeBinary = json["CMAKE_EXECUTABLE"].toString();
+                const QString buildDirectory = json["CMAKE_BINARY_DIR"].toString();
+                QProcess::execute(cmakeBinary, {"--build", buildDirectory});
+            }
         }
     }
 
-    void processStdin()
+    void readStdin()
     {
         const QByteArray data = standardInput.readLine();
-        lastCommand = data[0];
+        processCommand(data.simplified());
+    }
+    void readTcp()
+    {
+        const QByteArray data = tcpClient->readLine();
+        processCommand(data.simplified());
+    }
+
+    void processCommand(const QByteArray &data)
+    {
+        lastCommand = data.isEmpty() ? 0 : data[0];
+
         switch (lastCommand) {
+        case 0:
+            break;
         case 'r':
             std::cout << "Reloading" << std::endl;
             sendSignal("reload");
             break;
         case 'R':
             std::cout << "Restarting" << std::endl;
-            sendSignal("restart");
+            sendSignal("Restart");
             break;
         case 'q':
             std::cout << "Quitting" << std::endl;
@@ -149,8 +244,13 @@ public:
     }
 
 private:
+    QStringList arguments;
+    QTcpServer tcpServer;
+    QTcpSocket *tcpClient = nullptr;
     QLocalServer localServer;
     QList<QLocalSocket*> localSockets;
+    QList<QTcpSocket*> tcpClients;
+    QList<QProcess*> processes;
     QFile standardInput;
 #ifdef Q_OS_WIN
     QWinEventNotifier stdinNotifier;
@@ -171,7 +271,6 @@ int main(int argc, char **argv)
 
     ProcessController controller;
     if (!controller.run()) {
-        std::cerr << "Failed to start " << controller.program().toUtf8().constData() << std::endl;
         return 2;
     }
 

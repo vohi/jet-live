@@ -90,7 +90,7 @@ protected:
                     std::cerr << "[I]: Command: " << command.constData() << std::endl;
                     if (command == "quit") {
                         QCoreApplication::quit();
-                    } else if (command == "restart") {
+                    } else if (command == "Restart") {
                         _reloading = true;
                         _restarted = true;
                         _live.tryReload();
