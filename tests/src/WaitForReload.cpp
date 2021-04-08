@@ -4,6 +4,8 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <jet/live/signals.hpp>
+
 void runAfterDelayAndWaitForReload(std::function<void()>&& func, int milliseconds)
 {
     bool cont = true;
@@ -35,6 +37,6 @@ void waitForReload(int milliseconds)
 void waitForReloadWithSignal(int milliseconds)
 {
     runAfterDelayAndWaitForReload([] {
-        kill(getpid(), SIGUSR1);
+        kill(getpid(), JET_LIVE_RELOAD_SIGNAL);
     }, milliseconds);
 }

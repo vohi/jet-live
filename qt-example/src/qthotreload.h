@@ -16,7 +16,7 @@ public:
         Dirty,
         Loaded
     };
-    using EntryPoint = std::function<int()>;
+    using EntryPoint = std::function<int(QtHotReload *)>;
 
     QtHotReload(const EntryPoint &entry, QObject *parent = nullptr);
     ~QtHotReload();

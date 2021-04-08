@@ -4,6 +4,8 @@
 #include <iostream>
 #include "jet/live/Live.hpp"
 
+#include "signals.hpp"
+
 namespace
 {
     jet::Live* livePtr = nullptr;
@@ -22,7 +24,7 @@ namespace jet
     {
         ::livePtr = live;
         if (reloadOnSignal) {
-            signal(SIGUSR1, signalHandler);
+            signal(JET_LIVE_RELOAD_SIGNAL, signalHandler);
         }
     }
 

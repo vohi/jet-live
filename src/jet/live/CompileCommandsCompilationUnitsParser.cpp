@@ -5,7 +5,11 @@
 #include <json.hpp>
 #include <process.hpp>
 #include <teenypath.h>
+
+#if defined(__linux__) || defined(__APPLE__)
 #include <wordexp.h>
+#endif
+
 #include "jet/live/BuildConfig.hpp"
 #include "jet/live/DataTypes.hpp"
 #include "jet/live/LiveContext.hpp"
@@ -99,6 +103,7 @@ namespace jet
 
         std::unordered_map<std::string, CompilationUnit> res;
 
+#if defined(__linux__) || defined(__APPLE__)
         // Parsing `compile_commands.json`
         const auto& probablyDbPath = filepath;
         context->events->addLog(LogSeverity::kDebug, "Reading `compile_commands.json` from " + probablyDbPath.string());
@@ -167,6 +172,7 @@ namespace jet
             res[cu.sourceFilePath] = cu;
             wordfree(&result);
         }
+#endif
 
         return res;
     }

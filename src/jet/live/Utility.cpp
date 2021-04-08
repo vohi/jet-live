@@ -4,9 +4,13 @@
 #include <iomanip>
 #include <process.hpp>
 #include <sstream>
-#include <unistd.h>
 #include <whereami.h>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <unistd.h>
 #include <sys/mman.h>
+#endif
+
 #include "jet/live/LiveContext.hpp"
 
 namespace jet
@@ -298,12 +302,16 @@ namespace jet
 
     void* unprotect(void* address, size_t size)
     {
+        (void)address;
+        (void)size;
+#if defined(__linux__) || defined(__APPLE__)
         int64_t pagesize;
         pagesize = sysconf(_SC_PAGESIZE);
         address = reinterpret_cast<void*>(reinterpret_cast<int64_t>(address) & ~(pagesize - 1));  // NOLINT
         if (mprotect(address, size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {                   // NOLINT
             return address;
         }
+#endif
         return nullptr;
     }
 }

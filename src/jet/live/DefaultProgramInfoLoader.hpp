@@ -15,6 +15,12 @@ namespace jet
     using DefaultProgramInfoLoader = MachoProgramInfoLoader;
 }
 
+#elif defined(__WIN32) || defined(WIN32) || defined(__WIN32__)
+#include "jet/live/_win/CoffProgramInfoLoader.hpp"
+namespace jet
+{
+    using DefaultProgramInfoLoader = CoffProgramInfoLoader;
+}
 #else
 #error "Platform is not supported"
 #endif

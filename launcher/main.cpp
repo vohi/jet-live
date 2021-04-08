@@ -2,6 +2,7 @@
 #include <iostream>
 #include <csignal>
 
+#include "signals.hpp"
 
 class ProcessController : public QProcess
 {
@@ -99,11 +100,11 @@ public:
         switch (lastCommand) {
         case 'r':
             std::cout << "Reloading" << std::endl;
-            ::kill(processId(), SIGUSR1);
+            ::kill(processId(), JET_LIVE_RELOAD_SIGNAL);
             break;
         case 'R':
             std::cout << "Restarting" << std::endl;
-            ::kill(processId(), SIGUSR2);
+            ::kill(processId(), JET_LIVE_RESTART_SIGNAL);
             break;
         case 'q':
             std::cout << "Quitting" << std::endl;

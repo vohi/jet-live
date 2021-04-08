@@ -8,6 +8,8 @@
 #include <jet/live/Utility.hpp>
 #include <jet/live/ILiveListener.hpp>
 
+#include <jet/live/signals.hpp>
+
 #include <csignal>
 
 class QtHotReloadPrivate : public QThread
@@ -19,7 +21,7 @@ public:
     {
         connect(this, &QtHotReloadPrivate::stateChanged, this, &QtHotReloadPrivate::setState);
     }
-    
+
     // called in the thread
     void onLog(jet::LogSeverity severity, const std::string& message);
 
@@ -27,10 +29,10 @@ public:
     {
         static QtHotReloadPrivate *qt_reload_instance;
         qt_reload_instance = this;
-        const auto sigusr2 = signal(SIGUSR2, [](int){
+        const auto sigusr2 = signal(JET_LIVE_RESTART_SIGNAL, [](int){
             qt_reload_instance->_reloading = true;
             qt_reload_instance->_restarted = true;
-            raise(SIGUSR1); // triggers a reload
+            raise(JET_LIVE_RELOAD_SIGNAL); // triggers a reload
             QCoreApplication::quit();
         });
         const auto sigint = signal(SIGINT, [](int){
@@ -42,19 +44,19 @@ public:
             _restarted = false;
             // connect things once the event loop is running
             QCoreApplication::postEvent(this, new QEvent(QEvent::User));
-            res = _entry();
+            res = _entry(q_ptr);
             while (_reloading) {
                 QThread::msleep(50);
             }
         }
         signal(SIGINT, sigint);
-        signal(SIGUSR2, sigusr2);
+        signal(JET_LIVE_RESTART_SIGNAL, sigusr2);
         qt_reload_instance = nullptr;
         return res;
     }
 
     QtHotReload *q_ptr;
-    std::function<int()> _entry;
+    std::function<int(QtHotReload *)> _entry;
 
     QtHotReload::State _state{QtHotReload::Loaded};
     std::atomic_bool _reloading{false};
@@ -161,7 +163,7 @@ void QtHotReloadPrivate::onLog(jet::LogSeverity severity, const std::string& mes
             } else if (message.find("Compiling:") == 0 || message.find("Success:") == 0) {
                 emit stateChanged(QtHotReload::Dirty);
             }
-            
+
             severityString.append("[I]");
             break;
         case jet::LogSeverity::kWarning:

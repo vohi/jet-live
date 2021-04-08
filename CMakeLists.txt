@@ -11,15 +11,10 @@ if (NOT JET_LIVE_CONFIGURED)
 endif()
 
 ########## lib_subhook
-add_library(lib_subhook STATIC "")
-target_sources(lib_subhook
-  PRIVATE
-  libs/subhook/subhook.c
-  )
-target_include_directories(lib_subhook
-  PUBLIC
-  libs/subhook
-  )
+add_library(lib_subhook STATIC libs/subhook/subhook.c)
+target_include_directories(lib_subhook PUBLIC libs/subhook)
+# build a static library, so disable declspec(dllimport) and declspec(dllexport)
+target_compile_definitions(lib_subhook PUBLIC SUBHOOK_STATIC)
 
 ########## lib_whereami
 add_library(lib_whereami STATIC "")
@@ -53,24 +48,37 @@ target_sources(lib_efsw
   libs/efsw/src/efsw/Thread.cpp
   libs/efsw/src/efsw/Watcher.cpp
   libs/efsw/src/efsw/WatcherGeneric.cpp
-  libs/efsw/src/efsw/platform/posix/FileSystemImpl.cpp
-  libs/efsw/src/efsw/platform/posix/MutexImpl.cpp
-  libs/efsw/src/efsw/platform/posix/SystemImpl.cpp
-  libs/efsw/src/efsw/platform/posix/ThreadImpl.cpp
+)
+if (UNIX OR APPLE)
+  target_sources(lib_efsw PRIVATE
+    libs/efsw/src/efsw/platform/posix/FileSystemImpl.cpp
+    libs/efsw/src/efsw/platform/posix/MutexImpl.cpp
+    libs/efsw/src/efsw/platform/posix/SystemImpl.cpp
+    libs/efsw/src/efsw/platform/posix/ThreadImpl.cpp
   )
+endif()
+
 if (UNIX AND NOT APPLE)
-  target_sources(lib_efsw
-    PRIVATE
+  target_sources(lib_efsw PRIVATE
     libs/efsw/src/efsw/FileWatcherInotify.cpp
     libs/efsw/src/efsw/WatcherInotify.cpp
-    )
+  )
 elseif(UNIX AND APPLE)
-  target_sources(lib_efsw
-    PRIVATE
+  target_sources(lib_efsw PRIVATE
     libs/efsw/src/efsw/FileWatcherFSEvents.cpp
     libs/efsw/src/efsw/WatcherFSEvents.cpp
-    )
+  )
   target_link_libraries(lib_efsw "-framework CoreFoundation" "-framework CoreServices")
+elseif(WIN32)
+  target_sources(lib_efsw PRIVATE
+    libs/efsw/src/efsw/FileWatcherWin32.cpp
+    libs/efsw/src/efsw/WatcherWin32.cpp
+
+    libs/efsw/src/efsw/platform/win/FileSystemImpl.cpp
+    libs/efsw/src/efsw/platform/win/MutexImpl.cpp
+    libs/efsw/src/efsw/platform/win/SystemImpl.cpp
+    libs/efsw/src/efsw/platform/win/ThreadImpl.cpp
+  )
 endif()
 target_include_directories(lib_efsw
   PUBLIC
@@ -83,8 +91,18 @@ add_library(lib_tiny-process-library STATIC "")
 target_sources(lib_tiny-process-library
   PRIVATE
   libs/tiny-process-library/process.cpp
+  )
+if (UNIX)
+target_sources(lib_tiny-process-library
+  PRIVATE
   libs/tiny-process-library/process_unix.cpp
   )
+elseif (WIN32)
+target_sources(lib_tiny-process-library
+  PRIVATE
+  libs/tiny-process-library/process_win.cpp
+  )
+endif()
 target_include_directories(lib_tiny-process-library
   PUBLIC
   libs/tiny-process-library
@@ -108,6 +126,9 @@ set_target_properties(lib_teenypath
   PROPERTIES
   CXX_STANDARD 11
   )
+if (WIN32)
+  target_compile_definitions(lib_teenypath PRIVATE -DUNICODE)
+endif()
 
 ########## lib_json
 add_library(lib_json INTERFACE)
@@ -150,6 +171,11 @@ endif()
 ########## jet-live
 if (JET_LIVE_SHARED)
   add_library(jet-live SHARED "")
+else()
+  add_library(jet-live STATIC "")
+endif()
+
+if (UNIX)
   target_compile_options(jet-live PRIVATE $<$<COMPILE_LANGUAGE:C>:-fPIC> $<$<COMPILE_LANGUAGE:CXX>:-fPIC>)
   target_compile_options(lib_subhook PRIVATE $<$<COMPILE_LANGUAGE:C>:-fPIC> $<$<COMPILE_LANGUAGE:CXX>:-fPIC>)
   target_compile_options(lib_whereami PRIVATE $<$<COMPILE_LANGUAGE:C>:-fPIC> $<$<COMPILE_LANGUAGE:CXX>:-fPIC>)
@@ -157,11 +183,9 @@ if (JET_LIVE_SHARED)
   target_compile_options(lib_tiny-process-library PRIVATE $<$<COMPILE_LANGUAGE:C>:-fPIC> $<$<COMPILE_LANGUAGE:CXX>:-fPIC>)
   target_compile_options(lib_teenypath PRIVATE $<$<COMPILE_LANGUAGE:C>:-fPIC> $<$<COMPILE_LANGUAGE:CXX>:-fPIC>)
   target_compile_options(lib_xxhash PRIVATE $<$<COMPILE_LANGUAGE:C>:-fPIC> $<$<COMPILE_LANGUAGE:CXX>:-fPIC>)
-else()
-  add_library(jet-live STATIC "")
 endif()
-target_sources(jet-live
-  PRIVATE
+target_compile_definitions(jet-live PRIVATE JET_LIVE_IMPLEMENTATION)
+target_sources(jet-live PRIVATE
   src/jet/live/Utility.cpp
   src/jet/live/DefaultSymbolsFilter.cpp
   src/jet/live/FileWatcher.cpp
@@ -176,52 +200,61 @@ target_sources(jet-live
   src/jet/live/SignalReloader.cpp
   src/jet/live/AsyncEventQueue.cpp
   src/jet/live/BuildConfig.cpp
-  )
+)
 if (UNIX AND NOT APPLE)
-  target_sources(jet-live
-    PRIVATE
+  target_sources(jet-live PRIVATE
     src/jet/live/_linux/ElfProgramInfoLoader.cpp
     src/jet/live/_linux/Utility.cpp
     )
 elseif (UNIX AND APPLE)
-  target_sources(jet-live
-    PRIVATE
+  target_sources(jet-live PRIVATE
     src/jet/live/_macos/MachoProgramInfoLoader.cpp
     src/jet/live/_macos/Utility.cpp
     )
-endif()
-target_include_directories(jet-live
-  PUBLIC
-  src/
-  libs/utils/
+elseif (WIN32)
+  target_sources(jet-live PRIVATE
+    # blink:
+    # src/jet/live/_win/coff_reader.cpp
+    # src/jet/live/_win/msf_reader.cpp
+    # src/jet/live/_win/pdb_reader.cpp
+    # src/jet/live/_win/blink.cpp
+    # src/jet/live/_win/blink_linker.cpp
+
+    # own:
+    src/jet/live/_win/CoffProgramInfoLoader.cpp
+    src/jet/live/_win/Utility.cpp
   )
-find_package(Threads REQUIRED)
-target_link_libraries(jet-live
-  PRIVATE
+
+  # target_compile_options(jet-live PUBLIC # public due to static library
+    # /GS- # disable security check
+    # /Gy  # enable function-level linking
+  # )
+endif()
+target_include_directories(jet-live PUBLIC src/ libs/utils/)
+target_link_libraries(jet-live PUBLIC
   lib_subhook
   lib_whereami
   lib_teenypath
   lib_json
   lib_argh
   lib_xxhash
-  dl
-  Threads::Threads
-  )
-target_link_libraries(jet-live
-  PUBLIC
   lib_efsw
   lib_tiny-process-library
-  )
-if (UNIX AND NOT APPLE)
-  target_link_libraries(jet-live
-    PRIVATE
-    lib_elfio
-    )
+)
+
+if (WIN32)
+  target_link_libraries(jet-live PUBLIC psapi)
+else()
+  find_package(Threads REQUIRED)
+  target_link_libraries(jet-live PUBLIC dl Threads::Threads)
 endif()
-set_target_properties(jet-live
-  PROPERTIES
-  CXX_STANDARD 11
-  )
+if (UNIX AND NOT APPLE)
+  target_link_libraries(jet-live PUBLIC lib_elfio)
+endif()
+
+set_target_properties(jet-live PROPERTIES CXX_STANDARD 11)
+
+if (UNIX)
 target_compile_options(jet-live
   PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
@@ -237,6 +270,8 @@ target_compile_options(jet-live
   $<$<COMPILE_LANGUAGE:C>:-Wconversion>
   $<$<COMPILE_LANGUAGE:CXX>:-Wconversion>
   )
+endif()
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   target_compile_options(jet-live
     PRIVATE
@@ -251,6 +286,15 @@ set_property(
   JET_LIVE_CMAKE_GENERATOR="${CMAKE_GENERATOR}"
   JET_LIVE_CMAKE_BUILD_DIR="${CMAKE_BINARY_DIR}"
   )
+
+if (MSVC)
+  # target_compile_options(jet-live PRIVATE
+    # /GS- # Disable Security Check
+    # /Gy  # Enable Function-Level Linking
+  # )
+
+  # target_compile_definitions(jet-live PRIVATE PSAPI_VERSION=1)
+endif()
 
 if (JET_LIVE_BUILD_EXAMPLE)
   add_subdirectory(example)

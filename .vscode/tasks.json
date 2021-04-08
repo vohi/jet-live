@@ -13,6 +13,17 @@
             ]
         },
         {
+            "label": "cmake",
+            "type": "shell",
+            "command": "ninja -d keepdepfile",
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
             "label": "launch",
             "type": "shell",
             "presentation": {
