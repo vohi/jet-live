@@ -66,9 +66,10 @@ public:
     }
     ~ProcessController()
     {
+        std::cerr << "Terminating " << processes.count() << " processes" << std::endl;
         for (const auto &process : qAsConst(processes)) {
             enum class KillState { INT, TERM, KILL, GIVEUP } killState = KillState::INT;
-            while (process->state() == QProcess::Running) {
+            while (process->state() == QProcess::Running && killState != KillState::GIVEUP) {
                 switch (killState) {
                 case KillState::INT:
                     sendCommand("quit");
@@ -86,24 +87,30 @@ public:
                     killState = KillState::GIVEUP;
                     break;
                 case KillState::GIVEUP:
-                    continue;
+                    break;
                 }
+                std::cerr << "Waiting for " << process->objectName().toUtf8().constData();
                 process->waitForFinished(5000);
             }
         }
+        rebuild();
     }
 
     void sendCommand(const QByteArray &command)
     {
         std::cerr << "Sending " << command.constData() << " to " << localSockets.count() << " local clients" << std::endl;
         for (const auto &client : qAsConst(localSockets)) {
-            client->write(command + "\n");
-            client->waitForBytesWritten();
+            if (client->state() == QLocalSocket::ConnectedState) {
+                client->write(command + "\n");
+                client->waitForBytesWritten();
+            }
         }
         std::cerr << "Sending " << command.constData() << " to " << tcpSockets.count() << " remote clients" << std::endl;
         for (const auto &client : qAsConst(tcpSockets)) {
-            client->write(command + "\n");
-            client->waitForBytesWritten();
+            if (client->state() == QAbstractSocket::ConnectedState) {
+                client->write(command + "\n");
+                client->waitForBytesWritten();
+            }
         }
     }
 
@@ -168,9 +175,11 @@ public:
                         std::cerr << "[W]: Process crashed, giving up: " << process->program().toUtf8().constData() << std::endl;
                     }
                 }
-                processes.removeAll(process);
-                if (processes.isEmpty() && quit)
-                    QCoreApplication::quit();
+                for (const auto &process : qAsConst(processes)) {
+                    if (process->state() == QProcess::Running)
+                        return;
+                }
+                QCoreApplication::quit();
             });
 
             process->start(QIODevice::ReadOnly);
@@ -196,6 +205,7 @@ public:
             const QFileInfo pathInfo(exepath.absolutePath());
             QFile autogenFile(pathInfo.dir().absolutePath() + "/CMakeFiles/" + pathInfo.fileName() + "_autogen.dir/AutogenInfo.json");
             if (autogenFile.exists()) {
+                std::cerr << "Rebuilding " << exepath.path().toUtf8().constData() << std::endl;
                 autogenFile.open(QIODevice::ReadOnly);
                 const QJsonDocument json = QJsonDocument::fromJson(autogenFile.readAll());
                 const QString cmakeBinary = json["CMAKE_EXECUTABLE"].toString();
