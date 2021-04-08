@@ -4,13 +4,13 @@
 #include <QCoreApplication>
 #include <QThread>
 
+#include <iostream>
+
+#include <QLocalSocket>
+
 #include <jet/live/Live.hpp>
 #include <jet/live/Utility.hpp>
 #include <jet/live/ILiveListener.hpp>
-
-#include <jet/live/signals.hpp>
-
-#include <csignal>
 
 class QtHotReloadPrivate : public QThread
 {
@@ -27,19 +27,7 @@ public:
 
     int exec()
     {
-        static QtHotReloadPrivate *qt_reload_instance;
-        qt_reload_instance = this;
-        const auto sigusr2 = signal(JET_LIVE_RESTART_SIGNAL, [](int){
-            qt_reload_instance->_reloading = true;
-            qt_reload_instance->_restarted = true;
-            raise(JET_LIVE_RELOAD_SIGNAL); // triggers a reload
-            QCoreApplication::quit();
-        });
-        const auto sigint = signal(SIGINT, [](int){
-            QCoreApplication::quit();
-        });
-
-        int res;
+        int res = -1;
         while (_restarted) {
             _restarted = false;
             // connect things once the event loop is running
@@ -49,9 +37,6 @@ public:
                 QThread::msleep(50);
             }
         }
-        signal(SIGINT, sigint);
-        signal(JET_LIVE_RESTART_SIGNAL, sigusr2);
-        qt_reload_instance = nullptr;
         return res;
     }
 
@@ -89,9 +74,34 @@ protected:
         };
 
         jet::Live _live(std::unique_ptr<jet::ILiveListener>(new Listener(this)));
+
+        QLocalSocket socket;
+        socket.connectToServer("qt_hot_reload");
+        bool connected = socket.waitForConnected(1000);
+        if (connected) {
+            std::cerr << "[I]: Connected to local server" << std::endl;
+            socket.open();
+        }
         while (!isInterruptionRequested()) {
             _live.update();
-            QThread::msleep(100);
+            if (socket.state() == QLocalSocket::ConnectedState) {
+                if (socket.waitForReadyRead(100) && socket.canReadLine()) {
+                    const QByteArray command = socket.readLine().simplified();
+                    std::cerr << "[I]: Command: " << command.constData() << std::endl;
+                    if (command == "quit") {
+                        QCoreApplication::quit();
+                    } else if (command == "restart") {
+                        _reloading = true;
+                        _restarted = true;
+                        _live.tryReload();
+                        QCoreApplication::quit();
+                    } else if (command == "reload") {
+                        _live.tryReload();
+                    }
+                }
+            } else {
+                QThread::msleep(100);
+            }
         }
     }
 
@@ -148,7 +158,7 @@ private:
 
 void QtHotReloadPrivate::onLog(jet::LogSeverity severity, const std::string& message)
 {
-    QByteArray severityString;
+    std::string severityString;
     switch (severity) {
         case jet::LogSeverity::kInfo:
             // go via signal emissions so that setState is called by right event loop
@@ -175,7 +185,7 @@ void QtHotReloadPrivate::onLog(jet::LogSeverity severity, const std::string& mes
         default:
             return;  // Skipping debug messages, they are too verbose
     }
-    qDebug() << severityString << ": " << QString::fromStdString(message);
+    std::cerr << severityString << ": " << message << std::endl;
 }
 
 QtHotReload::QtHotReload(const EntryPoint &entry, QObject *parent)

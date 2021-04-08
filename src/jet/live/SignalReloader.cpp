@@ -1,10 +1,10 @@
 
 #include "SignalReloader.hpp"
-#include <csignal>
-#include <iostream>
 #include "jet/live/Live.hpp"
 
-#include "signals.hpp"
+#if __has_include(<csignal>)
+#include <csignal>
+#endif
 
 namespace
 {
@@ -23,9 +23,11 @@ namespace jet
     void onLiveCreated(Live* live, bool reloadOnSignal)
     {
         ::livePtr = live;
+#if defined(__LINUX__) || defined(__APPLE__)
         if (reloadOnSignal) {
-            signal(JET_LIVE_RELOAD_SIGNAL, signalHandler);
+            signal(SIGUSR1, signalHandler);
         }
+#endif
     }
 
     void onLiveDestroyed() { ::livePtr = nullptr; }

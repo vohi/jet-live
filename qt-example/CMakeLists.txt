@@ -20,12 +20,13 @@ target_include_directories(qtdialog
   PRIVATE
   src
   )
-find_package(Qt6 COMPONENTS Core Gui Widgets)
+find_package(Qt6 COMPONENTS Core Gui Widgets Network)
 target_link_libraries(qtdialog PRIVATE
   jet-live
   Qt6::Core
   Qt6::Widgets
   Qt6::Gui
+  Qt6::Network
 )
 set_target_properties(qtdialog PROPERTIES CXX_STANDARD 11)
 

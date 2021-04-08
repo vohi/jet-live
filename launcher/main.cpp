@@ -1,8 +1,8 @@
 #include <QtCore>
 #include <iostream>
-#include <csignal>
 
-#include "signals.hpp"
+#include <QLocalServer>
+#include <QLocalSocket>
 
 class ProcessController : public QProcess
 {
@@ -16,7 +16,7 @@ public:
         setArguments(arguments);
 
         if (!standardInput.open(0, QIODevice::ReadOnly|QIODevice::Unbuffered)) {
-            std::cerr << "Can't open stdin for reading" << std::endl;
+            std::cerr << "[E]: Can't open stdin for reading" << std::endl;
             abort();
         }
 
@@ -32,17 +32,27 @@ public:
             bool quit = true;
             if (exitStatus() == QProcess::CrashExit) {
                 if (prevCommand == 'r') {
-                    std::cerr << "Process crashed after reload, trying to repair" << std::endl;
+                    std::cerr << "[W]: Process crashed after reload, trying to repair" << std::endl;
                     rebuild();
                     quit = !run();
                 } else {
-                    std::cerr << "Process crashed, giving up" << std::endl;
+                    std::cerr << "[W]: Process crashed, giving up" << std::endl;
                 }
             }
             if (quit)
                 QCoreApplication::quit();
         });
         connect(&stdinNotifier, &QSocketNotifier::activated, this, &ProcessController::processStdin);
+
+        if (localServer.listen("qt_hot_reload")) {
+            connect(&localServer, &QLocalServer::newConnection, this, [&]{
+                localSockets.append(localServer.nextPendingConnection());
+                std::cerr << "[I]: Client connected" << std::endl;
+            });
+        } else {
+            std::cerr << "[E]: Can't start local socket server" << std::endl;
+            abort();
+        }
     }
     ~ProcessController()
     {
@@ -50,7 +60,7 @@ public:
         while (state() == QProcess::Running) {
             switch (killState) {
             case KillState::INT:
-                sendSignal(SIGINT);
+                sendSignal("quit");
                 killState = KillState::TERM;
                 break;
             case KillState::TERM:
@@ -68,13 +78,12 @@ public:
         }
     }
 
-    void sendSignal(int signalId)
+    void sendSignal(const QByteArray &command)
     {
-#ifdef Q_OS_WIN
-        qDebug() << "Not implemented";
-#else
-        ::kill(processId(), signalId);
-#endif
+        for (const auto &client : qAsConst(localSockets)) {
+            client->write(command + "\n");
+            client->waitForBytesWritten();
+        }
     }
 
     bool run()
@@ -110,11 +119,11 @@ public:
         switch (lastCommand) {
         case 'r':
             std::cout << "Reloading" << std::endl;
-            sendSignal(JET_LIVE_RELOAD_SIGNAL);
+            sendSignal("reload");
             break;
         case 'R':
             std::cout << "Restarting" << std::endl;
-            sendSignal(JET_LIVE_RESTART_SIGNAL);
+            sendSignal("restart");
             break;
         case 'q':
             std::cout << "Quitting" << std::endl;
@@ -129,6 +138,8 @@ public:
     }
 
 private:
+    QLocalServer localServer;
+    QList<QLocalSocket*> localSockets;
     QFile standardInput;
     QSocketNotifier stdinNotifier;
     char lastCommand;

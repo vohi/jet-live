@@ -13,8 +13,9 @@ target_sources(launcher
   PRIVATE
   main.cpp
 )
-find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Core Network)
 target_link_libraries(launcher
   PRIVATE
   Qt6::Core
+  Qt6::Network
 )
