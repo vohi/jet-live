@@ -2,12 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
+            "MIMode": "lldb",
+            "type": "cppdbg",
             "request": "launch",
-            "terminal" : "integrated",
             "name": "Debug",
-            "program": "${workspaceFolder}/build/example/example",
-            "cwd": "${workspaceFolder}/build",
+            "program": "${workspaceFolder}/build/qt-example/qtdialog",
+            "cwd": "${workspaceFolder}/build/qt-example",
             "preLaunchTask": "build"
         }
     ]
