@@ -6,27 +6,12 @@
 
 int main(int argc, char **argv)
 {
-    QtHotReload hotReload([&](QtHotReload *This) -> int {
+    QtHotReload hotReload([&]{
         QApplication app(argc, argv);
 
         Dialog dialog;
         dialog.show();
 
-        QObject::connect(This, &QtHotReload::stateChanged, &dialog, [&](QtHotReload::State state) {
-            switch (state) {
-            case QtHotReload::Initializing:
-                dialog.setEnabled(false);
-                break;
-            case QtHotReload::Ready:
-                dialog.setEnabled(true);
-                break;
-            case QtHotReload::Dirty:
-                dialog.setWindowTitle(dialog.windowTitle() + " [dirty]");
-                break;
-            default:
-                break;
-            }
-        });
         return app.exec();
     });
     return hotReload.exec();

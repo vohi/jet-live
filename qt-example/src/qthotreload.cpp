@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QCoreApplication>
 #include <QThread>
+#include <QVariant>
 
 #include <iostream>
 
@@ -32,7 +33,7 @@ public:
             _restarted = false;
             // connect things once the event loop is running
             QCoreApplication::postEvent(this, new QEvent(QEvent::User));
-            res = _entry(q_ptr);
+            res = _entry();
             while (_reloading) {
                 QThread::msleep(50);
             }
@@ -41,7 +42,7 @@ public:
     }
 
     QtHotReload *q_ptr;
-    std::function<int(QtHotReload *)> _entry;
+    QtHotReload::EntryPoint _entry;
 
     QtHotReload::State _state{QtHotReload::Loaded};
     std::atomic_bool _reloading{false};
@@ -147,12 +148,32 @@ private:
     void connectObject(QObject *receiver)
     {
         const QMetaObject *mo = receiver->metaObject();
-        if (mo->indexOfSlot("hotReload()") >= 0)
+        if (mo->indexOfSlot("hotReload()") >= 0) {
             connect(q_ptr, SIGNAL(reloaded()), receiver, SLOT(hotReload()));
+            connect(q_ptr, &QtHotReload::stateChanged, receiver, [receiver](QtHotReload::State state) {
+                switch (state) {
+                case QtHotReload::Initializing:
+                    receiver->setProperty("enabled", QVariant(false));
+                    break;
+                case QtHotReload::Ready:
+                    receiver->setProperty("enabled", QVariant(true));
+                    break;
+                case QtHotReload::Dirty:
+                    if (receiver->metaObject()->indexOfProperty("windowTitle")) {
+                        const QString orgTitle = receiver->property("windowTitle").toString();
+                        receiver->setProperty("windowTitle", QVariant(orgTitle + " [dirty]"));
+                    }
+                    break;
+                default:
+                    break;
+                }
+            });
+        }
     }
     void disconnectObject(const QObject *receiver)
     {
         q_ptr->disconnect(SIGNAL(reloaded()), receiver);
+        disconnect(q_ptr, &QtHotReload::stateChanged, receiver, nullptr);
     }
 };
 
