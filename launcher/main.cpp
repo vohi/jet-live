@@ -1,5 +1,8 @@
 #include <QtCore>
 #include <iostream>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -8,7 +11,11 @@ class ProcessController : public QProcess
 {
 public:
     ProcessController()
+#ifdef Q_OS_WIN
+    : stdinNotifier(GetStdHandle(STD_INPUT_HANDLE))
+#else
     : stdinNotifier(0, QSocketNotifier::Read)
+#endif
     {
         QStringList arguments = QCoreApplication::arguments();
         arguments.takeFirst(); // self
@@ -42,8 +49,13 @@ public:
             if (quit)
                 QCoreApplication::quit();
         });
+#ifdef Q_OS_WIN
+        connect(&stdinNotifier, &QWinEventNotifier::activated, this, &ProcessController::processStdin);
+#else
         connect(&stdinNotifier, &QSocketNotifier::activated, this, &ProcessController::processStdin);
+#endif
 
+        QLocalServer::removeServer("qt_hot_reload");
         if (localServer.listen("qt_hot_reload")) {
             connect(&localServer, &QLocalServer::newConnection, this, [&]{
                 localSockets.append(localServer.nextPendingConnection());
@@ -107,7 +119,6 @@ public:
             const QJsonDocument json = QJsonDocument::fromJson(autogenFile.readAll());
             const QString cmakeBinary = json["CMAKE_EXECUTABLE"].toString();
             const QString buildDirectory = json["CMAKE_BINARY_DIR"].toString();
-            qDebug() << "Running " << cmakeBinary << buildDirectory;
             QProcess::execute(cmakeBinary, {"--build", buildDirectory});
         }
     }
@@ -141,7 +152,11 @@ private:
     QLocalServer localServer;
     QList<QLocalSocket*> localSockets;
     QFile standardInput;
+#ifdef Q_OS_WIN
+    QWinEventNotifier stdinNotifier;
+#else
     QSocketNotifier stdinNotifier;
+#endif
     char lastCommand;
 };
 
