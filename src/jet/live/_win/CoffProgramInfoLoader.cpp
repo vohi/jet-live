@@ -46,7 +46,7 @@ CoffProgramInfoLoader::getProgramSymbols(const LiveContext* context,
 
     // copy-pasted from Linux code, may be invalid:
     std::string realFilePath = filepath.empty() ? context->thisExecutablePath : filepath;
-    std::cout << realFilePath << std::endl;
+    std::cerr << realFilePath << std::endl;
 
     return symbols;
 }
