@@ -71,7 +71,7 @@ public:
             while (process->state() == QProcess::Running) {
                 switch (killState) {
                 case KillState::INT:
-                    sendSignal("quit");
+                    sendCommand("quit");
 #ifndef Q_OS_WIN
                     ::kill(process->processId(), SIGINT);
 #endif
@@ -93,15 +93,15 @@ public:
         }
     }
 
-    void sendSignal(const QByteArray &command)
+    void sendCommand(const QByteArray &command)
     {
         std::cerr << "Sending " << command.constData() << " to " << localSockets.count() << " local clients" << std::endl;
         for (const auto &client : qAsConst(localSockets)) {
             client->write(command + "\n");
             client->waitForBytesWritten();
         }
-        std::cerr << "Sending " << command.constData() << " to " << tcpClients.count() << " remote clients" << std::endl;
-        for (const auto &client : qAsConst(tcpClients)) {
+        std::cerr << "Sending " << command.constData() << " to " << tcpSockets.count() << " remote clients" << std::endl;
+        for (const auto &client : qAsConst(tcpSockets)) {
             client->write(command + "\n");
             client->waitForBytesWritten();
         }
@@ -131,7 +131,7 @@ public:
                     tcpServer.listen(serverAddress);
                     connect(&tcpServer, &QTcpServer::newConnection, this, [&]{
                         std::cerr << "[I]: New tcp connection" << std::endl;
-                        tcpClients.append(tcpServer.nextPendingConnection());
+                        tcpSockets.append(tcpServer.nextPendingConnection());
                     });
                 }
                 segments.append("--connect");
@@ -220,25 +220,27 @@ public:
     {
         lastCommand = data.isEmpty() ? 0 : data[0];
 
+        std::cerr << "[I]: Sending ";
         switch (lastCommand) {
         case 0:
             break;
         case 'r':
-            std::cout << "Reloading" << std::endl;
-            sendSignal("reload");
+            std::cerr << "Reloading";
+            sendCommand("reload");
             break;
         case 'R':
-            std::cout << "Restarting" << std::endl;
-            sendSignal("Restart");
+            std::cerr << "Restarting";
+            sendCommand("Restart");
             break;
         case 'q':
-            std::cout << "Quitting" << std::endl;
+            std::cerr << "Quitting";
             QCoreApplication::quit();
             return;
         default:
-            std::cerr << "Unknown command: '" << data.simplified().constData() << "'" << std::endl;
+            std::cerr << "Unknown '" << data.simplified().constData() << "'";
             break;
         }
+        std::cerr << " command to clients" << localSockets.count() << "/" << tcpSockets.count() << std::endl;
 
         showDialog();
     }
@@ -249,7 +251,7 @@ private:
     QTcpSocket *tcpClient = nullptr;
     QLocalServer localServer;
     QList<QLocalSocket*> localSockets;
-    QList<QTcpSocket*> tcpClients;
+    QList<QTcpSocket*> tcpSockets;
     QList<QProcess*> processes;
     QFile standardInput;
 #ifdef Q_OS_WIN
