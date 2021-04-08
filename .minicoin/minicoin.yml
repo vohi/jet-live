@@ -1,0 +1,7 @@
+---
+settings:
+  defaults:
+    roles:
+      - role: mutagen
+        paths:
+          - ~/dev/jet-live
