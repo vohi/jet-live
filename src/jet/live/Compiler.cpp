@@ -2,7 +2,11 @@
 #include "Compiler.hpp"
 #include <algorithm>
 #include <cassert>
+
+#if defined(__linux__) || defined(__APPLE__)
 #include <dlfcn.h>
+#endif
+
 #include <teenypath.h>
 #include "jet/live/BuildConfig.hpp"
 #include "jet/live/Utility.hpp"
@@ -99,6 +103,7 @@ namespace jet
                 // Also loading library since we should not clear ready CUs
                 // if we get load time errors (like missing symbols)
                 if (status == 0) {
+#if defined(__linux__) || defined(__APPLE__)
                     const auto& libPath = m_runningLinkTask->cuOrLibFilepath;
                     m_context->events->addLog(LogSeverity::kDebug, "Opening " + libPath + "...");
                     auto libHandle = dlopen(libPath.c_str(), RTLD_NOW | RTLD_GLOBAL);  // NOLINT
@@ -109,6 +114,7 @@ namespace jet
                             LogSeverity::kError, "Cannot open library " + libPath + "\n" + std::string(dlerror()));
                         status = 123;
                     }
+#endif
                 }
 
                 std::vector<std::string> sourceFilePaths;

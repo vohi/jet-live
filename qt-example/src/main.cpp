@@ -6,13 +6,13 @@
 
 int main(int argc, char **argv)
 {
-    QtHotReload hotReload([&]() -> int {
+    QtHotReload hotReload([&](QtHotReload *This) -> int {
         QApplication app(argc, argv);
 
         Dialog dialog;
         dialog.show();
 
-        QObject::connect(&hotReload, &QtHotReload::stateChanged, &dialog, [&](QtHotReload::State state) {
+        QObject::connect(This, &QtHotReload::stateChanged, &dialog, [&](QtHotReload::State state) {
             switch (state) {
             case QtHotReload::Initializing:
                 dialog.setEnabled(false);

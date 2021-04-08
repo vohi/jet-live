@@ -1,16 +1,20 @@
 
 #include "FileWatcher.hpp"
 #include <cassert>
-#include <fcntl.h>
 #include <map>
 #include <memory>
 #include <teenypath.h>
-#include <unistd.h>
 #include <utility>
 #include <xxhash.h>
-#include <sys/mman.h>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <sys/types.h>
+#endif
+
 #include "jet/live/Utility.hpp"
 
 namespace jet

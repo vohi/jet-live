@@ -13,16 +13,16 @@ target_include_directories(example
   PRIVATE
   src
   )
-find_package(Threads REQUIRED)
 target_link_libraries(example
   PRIVATE
   jet-live
-  Threads::Threads
   )
 set_target_properties(example
   PROPERTIES
   CXX_STANDARD 11
   )
+
+if (UNIX)
 target_compile_options(example
   PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
@@ -38,6 +38,11 @@ target_compile_options(example
   $<$<COMPILE_LANGUAGE:C>:-Wconversion>
   $<$<COMPILE_LANGUAGE:CXX>:-Wconversion>
   )
+
+find_package(Threads REQUIRED)
+target_link_libraries(example PRIVATE Threads::Threads)
+endif()
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   target_compile_options(example
     PRIVATE
