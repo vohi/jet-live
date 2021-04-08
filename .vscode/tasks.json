@@ -36,7 +36,8 @@
             },
             "command": "bash",
             "args": [
-                "-c", "./launcher ${workspaceFolder}/build/qt-example/qtdialog 2> debug.log"
+                "-c",
+                "./launcher ${workspaceFolder}/build/qt-example/qtdialog 2> /tmp/debug.log"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/build/launcher"
